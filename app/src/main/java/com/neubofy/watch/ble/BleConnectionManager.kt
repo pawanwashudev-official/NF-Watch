@@ -1573,15 +1573,24 @@ class BleConnectionManager private constructor(private val context: Context) {
 
                 audioTrack?.play()
 
-                // Launch continuous sound synthesis in a sub-coroutine
+                // Launch continuous "Safe Chirp" sound synthesis in a sub-coroutine
                 val soundJob = launch {
-                    val freq = 3200.0
+                    val baseFreq = 3000.0
+                    val sweepRange = 800.0
+                    val sweepSpeed = 5.0 // Sweeps per second
                     val samples = ShortArray(1024)
                     var ph = 0.0
+                    var sweepPh = 0.0
+                    
                     while (isActive) {
                         for (i in samples.indices) {
-                            samples[i] = (Math.sin(ph) * (Short.MAX_VALUE * 0.9)).toInt().toShort() // 90% amp for head room
-                            ph += 2.0 * Math.PI * freq / sampleRate
+                            // Calculate sweeping frequency (3000Hz to 3800Hz)
+                            val currentFreq = baseFreq + (Math.sin(sweepPh) * 0.5 + 0.5) * sweepRange
+                            
+                            samples[i] = (Math.sin(ph) * (Short.MAX_VALUE * 0.9)).toInt().toShort()
+                            
+                            ph += 2.0 * Math.PI * currentFreq / sampleRate
+                            sweepPh += 2.0 * Math.PI * sweepSpeed / sampleRate
                         }
                         audioTrack?.write(samples, 0, samples.size)
                         yield()
