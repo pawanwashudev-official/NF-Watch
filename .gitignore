@@ -1,0 +1,35 @@
+# General
+.gradle
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Secrets & Signing
+*.jks
+*.keystore
+*.pgp
+*.gpg
+secrets.xml
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+*.swp
+*~
+
+# Kotlin/JVM
+.kotlin
+.kotlin-build
+bin/
+gen/
+
+# Logs
+*.log
+live_logcat.txt
+live_logcat_utf8.txt
+
+# Artifacts
+C:\Users\Pawan Kumar\.gemini\antigravity\brain\
