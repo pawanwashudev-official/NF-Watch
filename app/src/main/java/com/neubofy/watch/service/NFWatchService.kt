@@ -45,7 +45,7 @@ class NFWatchService : Service() {
                         Log.d(TAG, "Bluetooth turned ON, attempting priority reconnect")
                         // Immediate priority reconnect burst
                         serviceScope.launch {
-                            reconnectIfPaired(isPriority = true)
+                            reconnectIfPaired(isPriority = true, force = true)
                         }
                     }
                     BluetoothAdapter.STATE_OFF -> {
@@ -144,10 +144,11 @@ class NFWatchService : Service() {
         reconnectIfPaired()
     }
 
-    private fun reconnectIfPaired(isPriority: Boolean = false) {
+    private fun reconnectIfPaired(isPriority: Boolean = false, force: Boolean = false) {
         serviceScope.launch {
             val address = appCache.pairedDeviceAddress.first()
-            if (address != null && connectionManager.connectionState.value == ConnectionState.DISCONNECTED) {
+            val state = connectionManager.connectionState.value
+            if (address != null && (force || state == ConnectionState.DISCONNECTED)) {
                 val adapter = BluetoothAdapter.getDefaultAdapter()
                 if (adapter == null || !adapter.isEnabled) {
                     return@launch

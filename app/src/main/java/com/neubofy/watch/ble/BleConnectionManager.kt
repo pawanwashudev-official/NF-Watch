@@ -696,8 +696,8 @@ class BleConnectionManager private constructor(private val context: Context) {
     fun reconnect(deviceAddress: String? = null, isPriority: Boolean = false) {
         val address = deviceAddress ?: connectedDeviceAddress ?: return
         
-        // Force state to DISCONNECTED if we need to restart a stalled connection attempt
-        if (_connectionState.value == ConnectionState.CONNECTING && isPriority) {
+        // Force state to DISCONNECTED if we need to restart a stalled or zombie connection
+        if (isPriority) {
              _connectionState.value = ConnectionState.DISCONNECTED
         }
         
@@ -723,8 +723,7 @@ class BleConnectionManager private constructor(private val context: Context) {
      */
     fun onBluetoothOff() {
         addLog("EVENT", "BT_OFF_SIGNAL", null, null, null, "System Bluetooth Toggle OFF - Observing BLE link status")
-        // No longer manually setting _connectionState to DISCONNECTED here.
-        // This allows BLE to persist if the hardware/OS "Scanning Always Available" feature keeps the radio alive.
+        // We let the GATT callback handle the true disconnection.
     }
 
     private fun stopAllBackgroundWork() {
