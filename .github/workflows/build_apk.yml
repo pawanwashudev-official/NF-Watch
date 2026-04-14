@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
 
 jobs:
   build:
@@ -31,8 +32,20 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Build Release APK
+        # We will build the release APK. Since we don't have the keystore in github secrets yet,
+        # it will build an unsigned release APK or use default signing if configured.
+        run: ./gradlew assembleRelease
+        continue-on-error: true
+
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Debug-APK
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload Release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release-APK
+          path: app/build/outputs/apk/release/*.apk
