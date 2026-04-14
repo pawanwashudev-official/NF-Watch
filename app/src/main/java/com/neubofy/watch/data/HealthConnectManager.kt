@@ -224,10 +224,10 @@ class HealthConnectManager(private val context: Context) {
 
     suspend fun readTodaySteps(): Long = readStepsForDay(LocalDate.now())
 
-    suspend fun writeCalories(kcal: Double, startTime: Instant, endTime: Instant): Boolean {
+    suspend fun writeCalories(kcal: Double, startTime: Instant, endTime: Instant, clientRecordId: String? = null): Boolean {
         val c = client ?: return false
         return try {
-            val hourBlock = startTime.atZone(ZoneId.systemDefault()).withMinute(0).withSecond(0).withNano(0).toEpochSecond()
+            val recordId = clientRecordId ?: "kcal_${startTime.toEpochMilli()}"
             val record = TotalCaloriesBurnedRecord(
                 startTime = startTime,
                 startZoneOffset = ZoneId.systemDefault().rules.getOffset(startTime),
@@ -235,7 +235,7 @@ class HealthConnectManager(private val context: Context) {
                 endZoneOffset = ZoneId.systemDefault().rules.getOffset(endTime),
                 energy = Energy.kilocalories(kcal),
                 metadata = androidx.health.connect.client.records.metadata.Metadata(
-                    clientRecordId = "kcal_$hourBlock"
+                    clientRecordId = recordId
                 )
             )
             withTimeoutOrNull(5000L) {
@@ -248,10 +248,10 @@ class HealthConnectManager(private val context: Context) {
         }
     }
 
-    suspend fun writeDistance(meters: Double, startTime: Instant, endTime: Instant): Boolean {
+    suspend fun writeDistance(meters: Double, startTime: Instant, endTime: Instant, clientRecordId: String? = null): Boolean {
         val c = client ?: return false
         return try {
-            val hourBlock = startTime.atZone(ZoneId.systemDefault()).withMinute(0).withSecond(0).withNano(0).toEpochSecond()
+            val recordId = clientRecordId ?: "dist_${startTime.toEpochMilli()}"
             val record = DistanceRecord(
                 startTime = startTime,
                 startZoneOffset = ZoneId.systemDefault().rules.getOffset(startTime),
@@ -259,7 +259,7 @@ class HealthConnectManager(private val context: Context) {
                 endZoneOffset = ZoneId.systemDefault().rules.getOffset(endTime),
                 distance = Length.meters(meters),
                 metadata = androidx.health.connect.client.records.metadata.Metadata(
-                    clientRecordId = "dist_$hourBlock"
+                    clientRecordId = recordId
                 )
             )
             withTimeoutOrNull(5000L) {
