@@ -97,6 +97,7 @@ class BleConnectionManager private constructor(private val context: Context) {
     private val _services = MutableStateFlow<List<GattServiceInfo>>(emptyList())
     val services: StateFlow<List<GattServiceInfo>> = _services.asStateFlow()
 
+    private var lastSummaryCommitTime = 0L
     private val _batteryLevel = MutableStateFlow<Int?>(null)
     val batteryLevel: StateFlow<Int?> = _batteryLevel.asStateFlow()
 
@@ -407,9 +408,17 @@ class BleConnectionManager private constructor(private val context: Context) {
                 scope.launch {
                     appCache.updateHealthValues(steps = parsed.steps, calories = parsed.calories, distance = parsed.distanceMeters)
                 }
-                // Removed direct healthRepository.insertHealthData(...) here to prevent massive DB bloat.
-                // Live steps update the UI and Cache instantly. Final values are synced to DB/Health Connect 
-                // in periodic background sweeps or by pulling the daily/hourly history.
+
+                // Write calories and distance at least once per hour to avoid them not being recorded
+                // when periodic background sync is delayed or killed. Steps are excluded here
+                // to rely on HourlySteps chunks, but cal/dist have no history chunks.
+                val now = System.currentTimeMillis()
+                if (now - lastSummaryCommitTime > 60 * 60 * 1000L) {
+                    if (parsed.calories > 0) healthRepository?.insertHealthData("calories", parsed.calories.toDouble())
+                    if (parsed.distanceMeters > 0) healthRepository?.insertHealthData("distance", parsed.distanceMeters.toDouble())
+                    lastSummaryCommitTime = now
+                    addLog("EVENT", "SUMMARY_COMMIT", null, null, null, "Hourly summary commit triggered for cal/dist")
+                }
             }
             is GoBoultProtocol.ParsedData.HourlySteps -> {
                 // Categories:
