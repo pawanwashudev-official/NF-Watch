@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
 
 jobs:
   build:
@@ -31,8 +32,42 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      # To build a signed release APK using your own keystore file, follow these steps:
+      # 1. Base64 encode your .jks file: `base64 -i your_keystore.jks > keystore_base64.txt`
+      # 2. Add the following secrets to your GitHub repository (Settings > Secrets and variables > Actions):
+      #    - KEYSTORE_BASE64: The content of keystore_base64.txt
+      #    - KEYSTORE_PASSWORD: The password for your keystore
+      #    - KEY_ALIAS: The key alias name
+      #    - KEY_PASSWORD: The password for the specific key alias
+      - name: Decode Keystore and create local.properties
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ ! -z "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > release_keystore.jks
+            echo "KEYSTORE_FILE=release_keystore.jks" >> local.properties
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> local.properties
+            echo "KEY_ALIAS=$KEY_ALIAS" >> local.properties
+            echo "KEY_PASSWORD=$KEY_PASSWORD" >> local.properties
+          fi
+
+      - name: Build Release APK
+        # If secrets are not provided, this will build an unsigned release APK (app-release-unsigned.apk)
+        # If secrets are provided, this will build a signed release APK (app-release.apk)
+        run: ./gradlew assembleRelease
+        continue-on-error: true
+
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Debug-APK
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Upload Release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release-APK
+          path: app/build/outputs/apk/release/*.apk
