@@ -110,17 +110,19 @@ class HealthRepository(
                             synced = healthConnectManager.writeSteps(value.toLong(), time, time.plusSeconds(1800), clientRecordId)
                         } else {
                             val recordDate = time.atZone(zone).toLocalDate()
-                            val currentHcSteps = healthConnectManager.readStepsForDay(recordDate)
-                            val delta = (value.toLong() - currentHcSteps).coerceAtLeast(0)
-                            if (delta > 0) {
-                                // Live delta sync. Use a 15-minute block instead of a 1-minute burst so it graphs beautifully in HC.
-                                // We use a designated hourly live block ID so that subsequent deltas within the same hour safely overwrite each other 
-                                // instead of stacking duplicates!
-                                val liveHourId = "steps_live_${time.atZone(zone).withMinute(0).withSecond(0).withNano(0).toEpochSecond()}"
-                                synced = healthConnectManager.writeSteps(delta, time.minusSeconds(900), time, liveHourId)
-                            } else if (value > 0 && currentHcSteps > 0) {
-                                // Already synced the total or more
-                                synced = true 
+                            val today = LocalDate.now(zone)
+                            if (recordDate == today) {
+                                // Do not write live delta for today to avoid duplicating with HourlySteps history chunks
+                                synced = true
+                            } else {
+                                val currentHcSteps = healthConnectManager.readStepsForDay(recordDate)
+                                val delta = (value.toLong() - currentHcSteps).coerceAtLeast(0)
+                                if (delta > 0) {
+                                    val pastId = "steps_past_${time.toEpochMilli()}"
+                                    synced = healthConnectManager.writeSteps(delta, time.minusSeconds(900), time, pastId)
+                                } else if (value > 0 && currentHcSteps >= value.toLong()) {
+                                    synced = true
+                                }
                             }
                         }
                     }
@@ -168,7 +170,8 @@ class HealthRepository(
                         val currentHcKcal = healthConnectManager.readSumForDay(androidx.health.connect.client.records.TotalCaloriesBurnedRecord::class, recordDate)
                         val delta = (value - currentHcKcal).coerceAtLeast(0.0)
                         if (delta >= 1.0) {
-                            synced = healthConnectManager.writeCalories(delta, time.minusSeconds(60), time)
+                            val kcalId = "kcal_${time.toEpochMilli()}"
+                            synced = healthConnectManager.writeCalories(delta, time.minusSeconds(60), time, kcalId)
                         } else {
                             synced = true
                         }
@@ -178,7 +181,8 @@ class HealthRepository(
                         val currentHcMeters = healthConnectManager.readSumForDay(androidx.health.connect.client.records.DistanceRecord::class, recordDate)
                         val delta = (value - currentHcMeters).coerceAtLeast(0.0)
                         if (delta >= 1.0) {
-                            synced = healthConnectManager.writeDistance(delta, time.minusSeconds(60), time)
+                            val distId = "dist_${time.toEpochMilli()}"
+                            synced = healthConnectManager.writeDistance(delta, time.minusSeconds(60), time, distId)
                         } else {
                             synced = true
                         }
