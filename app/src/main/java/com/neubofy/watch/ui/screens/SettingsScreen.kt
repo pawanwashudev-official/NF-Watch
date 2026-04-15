@@ -571,14 +571,6 @@ fun SettingsScreen(
                         prefs.edit().putBoolean("sim_protection_enabled", false).apply()
                     }
                 }
-                val ringtoneLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
-                    if (result.resultCode == android.app.Activity.RESULT_OK) {
-                        val uri: Uri? = result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-                        if (uri != null) {
-                            prefs.edit().putString("sim_protection_ringtone", uri.toString()).apply()
-                        }
-                    }
-                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -624,23 +616,6 @@ fun SettingsScreen(
                         },
                         colors = SwitchDefaults.colors(checkedThumbColor = AccentRed, checkedTrackColor = AccentRed.copy(alpha = 0.3f))
                     )
-                }
-                HorizontalDivider(color = Gold.copy(alpha = 0.06f))
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
-                        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
-                        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
-                        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
-                        ringtoneLauncher.launch(intent)
-                    }.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.NotificationsActive, null, tint = AccentRed, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Select Warning Ringtone", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
-                    }
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
