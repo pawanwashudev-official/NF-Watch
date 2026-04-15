@@ -100,6 +100,21 @@ class NFWatchService : Service() {
 
 
 
+    private var isSimReceiverRegistered = false
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+        if (key == "sim_protection_enabled") {
+            val enabled = sharedPreferences.getBoolean(key, false)
+            if (enabled && !isSimReceiverRegistered) {
+                registerReceiver(simStateReceiver, android.content.IntentFilter("android.intent.action.SIM_STATE_CHANGED"))
+                isSimReceiverRegistered = true
+                Log.d(TAG, "SIM Protection enabled, listener registered")
+            } else if (!enabled && isSimReceiverRegistered) {
+                try { unregisterReceiver(simStateReceiver) } catch (e: Exception) {}
+                isSimReceiverRegistered = false
+                Log.d(TAG, "SIM Protection disabled, listener unregistered")
+            }
+        }
+    }
     private val simStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == "android.intent.action.SIM_STATE_CHANGED") {
@@ -247,7 +262,12 @@ class NFWatchService : Service() {
         }
         androidx.core.content.ContextCompat.registerReceiver(this, overlayReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
 
-        registerReceiver(simStateReceiver, IntentFilter("android.intent.action.SIM_STATE_CHANGED"))
+        val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
+        if (prefs.getBoolean("sim_protection_enabled", false)) {
+            registerReceiver(simStateReceiver, android.content.IntentFilter("android.intent.action.SIM_STATE_CHANGED"))
+            isSimReceiverRegistered = true
+        }
         registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
@@ -410,10 +430,14 @@ class NFWatchService : Service() {
         try { connectionManager.stopPhoneRing() } catch (e: Exception) {}
         try {
             unregisterReceiver(overlayReceiver)
-            unregisterReceiver(simStateReceiver)
             unregisterReceiver(unlockReceiver)
             unregisterReceiver(bluetoothStateReceiver)
         } catch (e: Exception) {}
+        if (isSimReceiverRegistered) {
+            try { unregisterReceiver(simStateReceiver) } catch (e: Exception) {}
+        }
+        val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
+        prefs.unregisterOnSharedPreferenceChangeListener(prefsListener)
         serviceJob.cancel()
         // Intentionally NOT calling unpair/disconnect here.
         // The GATT with autoConnect=true survives service restart via START_STICKY or AlarmManager.
