@@ -4,8 +4,10 @@ import android.app.*
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
 import android.content.Context
+import kotlinx.coroutines.delay
 import android.content.Intent
 import android.content.IntentFilter
+import kotlinx.coroutines.delay
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -35,6 +37,72 @@ class NFWatchService : Service() {
     
     lateinit var connectionManager: BleConnectionManager
     lateinit var appCache: AppCache
+
+
+
+    private var overlayView: android.view.View? = null
+
+    private val overlayReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val windowManager = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            if (intent.action == "com.neubofy.watch.SHOW_WARNING_OVERLAY") {
+                val source = intent.getStringExtra("source")
+                if (overlayView == null) {
+                    val linearLayout = android.widget.LinearLayout(context).apply {
+                        orientation = android.widget.LinearLayout.VERTICAL
+                        setBackgroundColor(android.graphics.Color.RED)
+                        gravity = android.view.Gravity.CENTER
+                        setPadding(32, 32, 32, 32)
+
+                        val warningText = android.widget.TextView(context).apply {
+                            if (source == "sim_removed") {
+                                text = "WARNING: THEFT DETECTED\n\nREINSERT SIM TO STOP THEFT DETECTION.\n\nYOU ARE UNDER MONITORING. LIVE VIDEOS AND LOCATION ARE BEING SHARED."
+                            } else {
+                                text = "WARNING: FIND PHONE INITIATED\n\nUNLOCK PHONE TO DISMISS.\n\nYOU ARE UNDER MONITORING. LIVE VIDEOS AND LOCATION ARE BEING SHARED."
+                            }
+                            setTextColor(android.graphics.Color.WHITE)
+                            textSize = 24f
+                            gravity = android.view.Gravity.CENTER
+                            setTypeface(null, android.graphics.Typeface.BOLD)
+                        }
+                        addView(warningText)
+                    }
+                    overlayView = linearLayout
+
+                    val params = android.view.WindowManager.LayoutParams(
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT,
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
+                        android.graphics.PixelFormat.TRANSLUCENT
+                    )
+                    params.gravity = android.view.Gravity.CENTER
+
+                    try {
+                        windowManager.addView(overlayView, params)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Could not show overlay warning. Permission might be missing.", e)
+                    }
+                }
+            } else if (intent.action == "com.neubofy.watch.HIDE_WARNING_OVERLAY") {
+                if (overlayView != null) {
+                    try {
+                        windowManager.removeView(overlayView)
+                    } catch (e: Exception) {}
+                    overlayView = null
+                }
+            }
+        }
+    }
+
+    private val unlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_USER_PRESENT) {
+                Log.d(TAG, "Phone unlocked, stopping find phone / SIM alert")
+                connectionManager.stopFindPhone()
+            }
+        }
+    }
 
     private val bluetoothStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -96,6 +164,14 @@ class NFWatchService : Service() {
         }
 
         // Register Bluetooth state listener
+
+        val filter = android.content.IntentFilter().apply {
+            addAction("com.neubofy.watch.SHOW_WARNING_OVERLAY")
+            addAction("com.neubofy.watch.HIDE_WARNING_OVERLAY")
+        }
+        androidx.core.content.ContextCompat.registerReceiver(this, overlayReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+
+        registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
         // Observe connection state to update notification & handle FGS promotion when connected
@@ -184,6 +260,40 @@ class NFWatchService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
         // Return STICKY to ensure service restarts if killed by system
+
+        if (intent?.action == "SIM_REMOVED") {
+            serviceScope.launch {
+                // Normal vibrate directly
+                val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
+                    vm.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(3000, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(3000)
+                }
+
+                delay(3000)
+                val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+                if (!keyguardManager.isKeyguardLocked) {
+                    // Instantly lock phone
+                    val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+                    val componentName = android.content.ComponentName(this@NFWatchService, AdminReceiver::class.java)
+                    if (devicePolicyManager.isAdminActive(componentName)) {
+                        devicePolicyManager.lockNow()
+                    }
+                }
+                connectionManager.triggerFindPhone("sim_removed")
+            }
+        } else if (intent?.action == "SIM_INSERTED") {
+            connectionManager.stopFindPhone()
+        }
+
         return START_STICKY
     }
 
@@ -250,7 +360,11 @@ class NFWatchService : Service() {
         super.onDestroy()
         Log.d(TAG, "Service onDestroy")
         try { connectionManager.stopPhoneRing() } catch (e: Exception) {}
-        try { unregisterReceiver(bluetoothStateReceiver) } catch (e: Exception) {}
+        try {
+            unregisterReceiver(overlayReceiver)
+            unregisterReceiver(unlockReceiver)
+            unregisterReceiver(bluetoothStateReceiver)
+        } catch (e: Exception) {}
         serviceJob.cancel()
         // Intentionally NOT calling unpair/disconnect here.
         // The GATT with autoConnect=true survives service restart via START_STICKY or AlarmManager.

@@ -1529,7 +1529,18 @@ class BleConnectionManager private constructor(private val context: Context) {
         }
     }
 
-    private fun startPhoneRing() {
+
+    fun triggerFindPhone(source: String = "watch") {
+        _findPhoneRinging.value = true
+        startPhoneRing(source)
+    }
+
+    fun stopFindPhone() {
+        _findPhoneRinging.value = false
+        stopPhoneRing()
+    }
+
+    private fun startPhoneRing(source: String = "watch") {
         try {
             stopPhoneRing() 
             
@@ -1539,6 +1550,12 @@ class BleConnectionManager private constructor(private val context: Context) {
             
             // 🛡️ Volume Guardian: Resets volume to 100% every 3 seconds
             am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+
+            // Show warning
+            val intent = android.content.Intent("com.neubofy.watch.SHOW_WARNING_OVERLAY")
+            intent.putExtra("source", source)
+            context.sendBroadcast(intent)
+
             volumeGuardianJob = scope.launch(Dispatchers.Main) {
                 while(isActive) {
                     delay(3000)
@@ -1652,6 +1669,10 @@ class BleConnectionManager private constructor(private val context: Context) {
             sosJob = null
             
             vibrator?.cancel()
+
+            val intent = android.content.Intent("com.neubofy.watch.HIDE_WARNING_OVERLAY")
+            context.sendBroadcast(intent)
+
             vibrator = null
 
             audioTrack?.stop()
