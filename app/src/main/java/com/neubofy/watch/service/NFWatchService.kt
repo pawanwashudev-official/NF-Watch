@@ -117,15 +117,30 @@ class NFWatchService : Service() {
         }
     }
 
+
     private fun handleSimRemoval() {
         simProtectionJob?.cancel()
         simProtectionJob = serviceScope.launch {
+            // Notification so user knows what's happening
+            try {
+                val notifManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                val builder = androidx.core.app.NotificationCompat.Builder(this@NFWatchService, CHANNEL_ID)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("SIM Card Removed!")
+                    .setContentText("Theft protection triggered. Device locked.")
+                    .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                notifManager.notify(9999, builder.build())
+            } catch (e: Exception) {}
+
             // Instantly lock phone
             val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
             val componentName = android.content.ComponentName(this@NFWatchService, AdminReceiver::class.java)
             if (devicePolicyManager.isAdminActive(componentName)) {
                 devicePolicyManager.lockNow()
+            } else {
+                Log.w(TAG, "Device Admin is missing, could not lock.")
             }
+
 
             // Normal vibrate directly
             val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
