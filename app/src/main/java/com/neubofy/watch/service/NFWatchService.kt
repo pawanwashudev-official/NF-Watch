@@ -31,6 +31,8 @@ import android.content.pm.ServiceInfo
 import androidx.core.content.ContextCompat
 
 class NFWatchService : Service() {
+    private var simProtectionJob: kotlinx.coroutines.Job? = null
+
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
@@ -95,10 +97,66 @@ class NFWatchService : Service() {
         }
     }
 
+
+
+    private val simStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "android.intent.action.SIM_STATE_CHANGED") {
+                val state = intent.getStringExtra("ss")
+                val prefs = context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
+                if (!prefs.getBoolean("sim_protection_enabled", false)) return
+
+                if (state == "ABSENT") {
+                    handleSimRemoval()
+                } else if (state == "LOADED" || state == "READY") {
+                    simProtectionJob?.cancel()
+                    simProtectionJob = null
+                    connectionManager.stopFindPhone()
+                }
+            }
+        }
+    }
+
+    private fun handleSimRemoval() {
+        simProtectionJob?.cancel()
+        simProtectionJob = serviceScope.launch {
+            // Instantly lock phone
+            val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+            val componentName = android.content.ComponentName(this@NFWatchService, AdminReceiver::class.java)
+            if (devicePolicyManager.isAdminActive(componentName)) {
+                devicePolicyManager.lockNow()
+            }
+
+            // Normal vibrate directly
+            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
+                vm.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(3000, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(3000)
+            }
+
+            delay(3000)
+            // If not cancelled within 3 seconds, start the loud alarm
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+            if (keyguardManager.isKeyguardLocked) {
+                connectionManager.triggerFindPhone("sim_removed")
+            }
+        }
+    }
+
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_USER_PRESENT) {
                 Log.d(TAG, "Phone unlocked, stopping find phone / SIM alert")
+                simProtectionJob?.cancel()
+                simProtectionJob = null
                 connectionManager.stopFindPhone()
             }
         }
@@ -171,6 +229,7 @@ class NFWatchService : Service() {
         }
         androidx.core.content.ContextCompat.registerReceiver(this, overlayReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
 
+        registerReceiver(simStateReceiver, IntentFilter("android.intent.action.SIM_STATE_CHANGED"))
         registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
@@ -261,38 +320,9 @@ class NFWatchService : Service() {
         Log.d(TAG, "Service onStartCommand")
         // Return STICKY to ensure service restarts if killed by system
 
-        if (intent?.action == "SIM_REMOVED") {
-            serviceScope.launch {
-                // Normal vibrate directly
-                val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                    val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
-                    vm.defaultVibrator
-                } else {
-                    @Suppress("DEPRECATION")
-                    getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
-                }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(3000, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(3000)
-                }
 
-                delay(3000)
-                val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
-                if (!keyguardManager.isKeyguardLocked) {
-                    // Instantly lock phone
-                    val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-                    val componentName = android.content.ComponentName(this@NFWatchService, AdminReceiver::class.java)
-                    if (devicePolicyManager.isAdminActive(componentName)) {
-                        devicePolicyManager.lockNow()
-                    }
-                }
-                connectionManager.triggerFindPhone("sim_removed")
-            }
-        } else if (intent?.action == "SIM_INSERTED") {
-            connectionManager.stopFindPhone()
-        }
+
+
 
         return START_STICKY
     }
@@ -362,6 +392,7 @@ class NFWatchService : Service() {
         try { connectionManager.stopPhoneRing() } catch (e: Exception) {}
         try {
             unregisterReceiver(overlayReceiver)
+            unregisterReceiver(simStateReceiver)
             unregisterReceiver(unlockReceiver)
             unregisterReceiver(bluetoothStateReceiver)
         } catch (e: Exception) {}

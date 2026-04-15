@@ -52,14 +52,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.NFWatch"
         tools:targetApi="35">
-        <receiver android:name=".service.SimStateReceiver" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.SIM_STATE_CHANGED" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.USER_PRESENT" />
-            </intent-filter>
-        </receiver>
+
         <receiver android:name=".service.AdminReceiver" android:permission="android.permission.BIND_DEVICE_ADMIN" android:exported="true">
             <meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin" />
             <intent-filter>
