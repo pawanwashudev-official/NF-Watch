@@ -99,16 +99,19 @@ class NFWatchService : Service() {
 
 
 
+
     private val simStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == "android.intent.action.SIM_STATE_CHANGED") {
-                val state = intent.getStringExtra("ss")
                 val prefs = context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
                 if (!prefs.getBoolean("sim_protection_enabled", false)) return
 
-                if (state == "ABSENT") {
+                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+                val state = telephonyManager.simState
+
+                if (state == android.telephony.TelephonyManager.SIM_STATE_ABSENT) {
                     handleSimRemoval()
-                } else if (state == "LOADED" || state == "READY") {
+                } else if (state == android.telephony.TelephonyManager.SIM_STATE_READY) {
                     simProtectionJob?.cancel()
                     simProtectionJob = null
                     connectionManager.stopFindPhone()
