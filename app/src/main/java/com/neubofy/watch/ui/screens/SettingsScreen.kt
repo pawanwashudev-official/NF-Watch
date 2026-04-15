@@ -19,6 +19,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.media.RingtoneManager
+import android.net.Uri
 import com.neubofy.watch.ble.BleConnectionManager
 import com.neubofy.watch.ble.ConnectionState
 import com.neubofy.watch.data.AppCache
@@ -551,6 +558,92 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Privacy
+            Spacer(modifier = Modifier.height(20.dp))
+            SettingSectionTitle("Sim Protection")
+            GlassSettingsCard {
+                val prefs = context.getSharedPreferences("nf_watch_boot", android.content.Context.MODE_PRIVATE)
+                var simProtectionEnabledState by remember { mutableStateOf(prefs.getBoolean("sim_protection_enabled", false)) }
+                var phoneStatePermissionGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) }
+                val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestPermission()) { isGranted ->
+                    phoneStatePermissionGranted = isGranted
+                    if (!isGranted) {
+                        simProtectionEnabledState = false
+                        prefs.edit().putBoolean("sim_protection_enabled", false).apply()
+                    }
+                }
+                val ringtoneLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
+                    if (result.resultCode == android.app.Activity.RESULT_OK) {
+                        val uri: Uri? = result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                        if (uri != null) {
+                            prefs.edit().putString("sim_protection_ringtone", uri.toString()).apply()
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Security, null, tint = AccentRed, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Prevent Unauthorized SIM Removal", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+                        Text("Vibrates, locks, and rings phone on SIM removal", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+                    }
+                    Switch(
+                        checked = simProtectionEnabledState,
+                        onCheckedChange = { isChecked ->
+                            simProtectionEnabledState = isChecked
+                            prefs.edit().putBoolean("sim_protection_enabled", isChecked).apply()
+                            if (isChecked) {
+                                var allGranted = true
+                                if (!phoneStatePermissionGranted) {
+                                    permissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
+                                    allGranted = false
+                                }
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(context)) {
+                                    val intentOverlay = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
+                                    context.startActivity(intentOverlay)
+                                    allGranted = false
+                                }
+                                val devicePolicyManager = context.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+                                val componentName = android.content.ComponentName(context, com.neubofy.watch.service.AdminReceiver::class.java)
+                                if (!devicePolicyManager.isAdminActive(componentName)) {
+                                    val intentAdmin = android.content.Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                                    intentAdmin.putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
+                                    intentAdmin.putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Required to lock screen if SIM card is removed.")
+                                    context.startActivity(intentAdmin)
+                                    allGranted = false
+                                }
+
+                                // Only actually toggle if they had everything, otherwise they have to grant and toggle again
+                                if (!allGranted) {
+                                    simProtectionEnabledState = false
+                                    prefs.edit().putBoolean("sim_protection_enabled", false).apply()
+                                }
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = AccentRed, checkedTrackColor = AccentRed.copy(alpha = 0.3f))
+                    )
+                }
+                HorizontalDivider(color = Gold.copy(alpha = 0.06f))
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                        intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                        ringtoneLauncher.launch(intent)
+                    }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.NotificationsActive, null, tint = AccentRed, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Select Warning Ringtone", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
             SettingSectionTitle("Privacy")
             GlassSettingsCard {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {

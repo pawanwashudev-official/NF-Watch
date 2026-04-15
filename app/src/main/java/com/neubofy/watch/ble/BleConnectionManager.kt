@@ -573,7 +573,7 @@ class BleConnectionManager private constructor(private val context: Context) {
             }
             is GoBoultProtocol.ParsedData.FindPhone -> {
                 _findPhoneRinging.value = parsed.ringing
-                if (parsed.ringing) startPhoneRing() else stopPhoneRing()
+                if (parsed.ringing) triggerFindPhone() else stopFindPhone()
             }
             is GoBoultProtocol.ParsedData.WatchFaceChanged -> {
                 addLog("EVENT", "WATCH_FACE", null, null, null, "Watch face changed to: ${parsed.faceIndex}")
@@ -1529,7 +1529,25 @@ class BleConnectionManager private constructor(private val context: Context) {
         }
     }
 
-    private fun startPhoneRing() {
+
+    fun triggerFindPhone(source: String = "watch") {
+        // Instantly lock phone for both cases
+        val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+        val componentName = android.content.ComponentName(context, com.neubofy.watch.service.AdminReceiver::class.java)
+        if (devicePolicyManager.isAdminActive(componentName)) {
+            devicePolicyManager.lockNow()
+        }
+
+        _findPhoneRinging.value = true
+        startPhoneRing(source)
+    }
+
+    fun stopFindPhone() {
+        _findPhoneRinging.value = false
+        stopPhoneRing()
+    }
+
+    private fun startPhoneRing(source: String = "watch") {
         try {
             stopPhoneRing() 
             
@@ -1539,6 +1557,12 @@ class BleConnectionManager private constructor(private val context: Context) {
             
             // 🛡️ Volume Guardian: Resets volume to 100% every 3 seconds
             am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+
+            // Show warning
+            val intent = android.content.Intent("com.neubofy.watch.SHOW_WARNING_OVERLAY")
+            intent.putExtra("source", source)
+            context.sendBroadcast(intent)
+
             volumeGuardianJob = scope.launch(Dispatchers.Main) {
                 while(isActive) {
                     delay(3000)
@@ -1652,6 +1676,10 @@ class BleConnectionManager private constructor(private val context: Context) {
             sosJob = null
             
             vibrator?.cancel()
+
+            val intent = android.content.Intent("com.neubofy.watch.HIDE_WARNING_OVERLAY")
+            context.sendBroadcast(intent)
+
             vibrator = null
 
             audioTrack?.stop()
