@@ -563,7 +563,24 @@ fun SettingsScreen(
             GlassSettingsCard {
                 val prefs = context.getSharedPreferences("nf_watch_boot", android.content.Context.MODE_PRIVATE)
                 var simProtectionEnabledState by remember { mutableStateOf(prefs.getBoolean("sim_protection_enabled", false)) }
+                var showVivoWarning by remember { mutableStateOf(false) }
                 var phoneStatePermissionGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) }
+
+                if (showVivoWarning) {
+                    AlertDialog(
+                        onDismissRequest = { showVivoWarning = false },
+                        title = { Text("Vivo Device Detected", color = AccentRed) },
+                        text = { Text("To ensure SIM Protection works when the screen is locked, you MUST go to your Phone Settings -> Apps -> NF Watch and enable:\n\n1. Allow Auto-start\n2. Display pop-up windows while running in the background", color = TextPrimary) },
+                        confirmButton = {
+                            TextButton(onClick = { showVivoWarning = false }) {
+                                Text("I Understand", color = Gold)
+                            }
+                        },
+                        containerColor = SurfaceCard,
+                        titleContentColor = AccentRed,
+                        textContentColor = TextPrimary
+                    )
+                }
                 val permissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestPermission()) { isGranted ->
                     phoneStatePermissionGranted = isGranted
                     if (!isGranted) {
@@ -586,7 +603,11 @@ fun SettingsScreen(
                         onCheckedChange = { isChecked ->
                             simProtectionEnabledState = isChecked
                             prefs.edit().putBoolean("sim_protection_enabled", isChecked).apply()
+
                             if (isChecked) {
+                                if (android.os.Build.MANUFACTURER.equals("vivo", ignoreCase = true)) {
+                                    showVivoWarning = true
+                                }
                                 var allGranted = true
                                 if (!phoneStatePermissionGranted) {
                                     permissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
