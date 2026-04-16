@@ -19,6 +19,9 @@ interface HealthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(record: HealthRecord)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<HealthRecord>)
+
     @Query("SELECT * FROM health_records WHERE type = :type ORDER BY timestamp DESC LIMIT 500")
     fun getRecordsByType(type: String): Flow<List<HealthRecord>>
 
@@ -50,6 +53,9 @@ interface HealthDao {
     // Delete records in a time range for a type (for upsert)
     @Query("DELETE FROM health_records WHERE type = :type AND timestamp >= :startMs AND timestamp < :endMs")
     suspend fun deleteByTypeAndDateRange(type: String, startMs: Long, endMs: Long)
+
+    @Query("SELECT timestamp FROM health_records WHERE type = :type AND timestamp >= :startMs AND timestamp <= :endMs")
+    suspend fun getExistingTimestampsInRange(type: String, startMs: Long, endMs: Long): List<Long>
 }
 
 @Database(entities = [HealthRecord::class], version = 1, exportSchema = false)
