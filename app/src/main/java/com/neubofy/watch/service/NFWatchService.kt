@@ -101,36 +101,37 @@ class NFWatchService : Service() {
 
 
     private var isSimReceiverRegistered = false
-    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
-        if (key == "sim_protection_enabled") {
-            val enabled = sharedPreferences.getBoolean(key, false)
-            if (enabled && !isSimReceiverRegistered) {
-                registerReceiver(simStateReceiver, android.content.IntentFilter("android.intent.action.SIM_STATE_CHANGED"))
-                isSimReceiverRegistered = true
-                Log.d(TAG, "SIM Protection enabled, listener registered")
-            } else if (!enabled && isSimReceiverRegistered) {
-                try { unregisterReceiver(simStateReceiver) } catch (e: Exception) {}
-                isSimReceiverRegistered = false
-                Log.d(TAG, "SIM Protection disabled, listener unregistered")
+
+    private val subscriptionManagerListener = object : android.telephony.SubscriptionManager.OnSubscriptionsChangedListener() {
+        override fun onSubscriptionsChanged() {
+            val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("sim_protection_enabled", false)) return
+
+            val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+            val state = telephonyManager.simState
+
+            if (state == android.telephony.TelephonyManager.SIM_STATE_ABSENT) {
+                handleSimRemoval()
+            } else if (state == android.telephony.TelephonyManager.SIM_STATE_READY) {
+                simProtectionJob?.cancel()
+                simProtectionJob = null
+                connectionManager.stopFindPhone()
             }
         }
     }
-    private val simStateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "android.intent.action.SIM_STATE_CHANGED") {
-                val prefs = context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
-                if (!prefs.getBoolean("sim_protection_enabled", false)) return
 
-                val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
-                val state = telephonyManager.simState
-
-                if (state == android.telephony.TelephonyManager.SIM_STATE_ABSENT) {
-                    handleSimRemoval()
-                } else if (state == android.telephony.TelephonyManager.SIM_STATE_READY) {
-                    simProtectionJob?.cancel()
-                    simProtectionJob = null
-                    connectionManager.stopFindPhone()
-                }
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+        if (key == "sim_protection_enabled") {
+            val enabled = sharedPreferences.getBoolean(key, false)
+            val subscriptionManager = getSystemService(android.telephony.SubscriptionManager::class.java)
+            if (enabled && !isSimReceiverRegistered) {
+                subscriptionManager?.addOnSubscriptionsChangedListener(mainExecutor, subscriptionManagerListener)
+                isSimReceiverRegistered = true
+                Log.d(TAG, "SIM Protection enabled, listener registered")
+            } else if (!enabled && isSimReceiverRegistered) {
+                try { subscriptionManager?.removeOnSubscriptionsChangedListener(subscriptionManagerListener) } catch (e: Exception) {}
+                isSimReceiverRegistered = false
+                Log.d(TAG, "SIM Protection disabled, listener unregistered")
             }
         }
     }
@@ -265,7 +266,8 @@ class NFWatchService : Service() {
         val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
         if (prefs.getBoolean("sim_protection_enabled", false)) {
-            registerReceiver(simStateReceiver, android.content.IntentFilter("android.intent.action.SIM_STATE_CHANGED"))
+            val subscriptionManager = getSystemService(android.telephony.SubscriptionManager::class.java)
+            subscriptionManager?.addOnSubscriptionsChangedListener(mainExecutor, subscriptionManagerListener)
             isSimReceiverRegistered = true
         }
         registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
@@ -434,7 +436,8 @@ class NFWatchService : Service() {
             unregisterReceiver(bluetoothStateReceiver)
         } catch (e: Exception) {}
         if (isSimReceiverRegistered) {
-            try { unregisterReceiver(simStateReceiver) } catch (e: Exception) {}
+            val subscriptionManager = getSystemService(android.telephony.SubscriptionManager::class.java)
+            try { subscriptionManager?.removeOnSubscriptionsChangedListener(subscriptionManagerListener) } catch (e: Exception) {}
         }
         val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
         prefs.unregisterOnSharedPreferenceChangeListener(prefsListener)
