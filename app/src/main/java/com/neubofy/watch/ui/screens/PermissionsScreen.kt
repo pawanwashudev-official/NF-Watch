@@ -72,6 +72,13 @@ fun PermissionsScreen(
             } else true
         )
     }
+    var drawOverlaysGranted by remember {
+        mutableStateOf(
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                android.provider.Settings.canDrawOverlays(context)
+            } else true
+        )
+    }
 
     val permScope = rememberCoroutineScope()
 
@@ -90,6 +97,9 @@ fun PermissionsScreen(
                 } else true
                 notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                } else true
+                drawOverlaysGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    android.provider.Settings.canDrawOverlays(context)
                 } else true
                 permScope.launch {
                     if (healthConnectAvailable) {

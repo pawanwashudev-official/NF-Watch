@@ -275,7 +275,16 @@ class NFWatchService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Service onStartCommand")
+        Log.d(TAG, "Service onStartCommand: ${intent?.action}")
+
+        if (intent?.action == "com.neubofy.watch.FIND_PHONE_RETRIGGER") {
+            val prefsForFindPhone = getSharedPreferences("nf_watch_boot", android.content.Context.MODE_PRIVATE)
+            if (prefsForFindPhone.getBoolean("find_phone_active", false)) {
+                serviceScope.launch {
+                    connectionManager.triggerFindPhone("alarm_retrigger")
+                }
+            }
+        }
         // Return STICKY to ensure service restarts if killed by system
 
 
