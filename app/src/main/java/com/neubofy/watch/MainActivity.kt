@@ -286,7 +286,8 @@ fun NFWatchApp(
                     },
                     onNavigateToDeveloper = {
                         navController.navigate("developer")
-                    }
+                    },
+                    onNavigateToFindPhone = { navController.navigate("find_phone_settings") }
                 )
             }
         }

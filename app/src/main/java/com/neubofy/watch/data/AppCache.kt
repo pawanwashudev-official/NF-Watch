@@ -54,6 +54,17 @@ class AppCache(private val context: Context) {
         val GOAL_STEPS = intPreferencesKey("goal_steps")
         val UI_ACCENT = stringPreferencesKey("ui_accent")
         val SYNC_DND_WITH_PHONE = booleanPreferencesKey("sync_dnd_with_phone")
+
+        val FIND_PHONE_LOCK = booleanPreferencesKey("find_phone_lock")
+        val FIND_PHONE_WIFI = booleanPreferencesKey("find_phone_wifi")
+        val FIND_PHONE_BT = booleanPreferencesKey("find_phone_bt")
+        val FIND_PHONE_GPS = booleanPreferencesKey("find_phone_gps")
+        val FIND_PHONE_SIREN = booleanPreferencesKey("find_phone_siren")
+        val FIND_PHONE_VOLUME_INTERVAL = intPreferencesKey("find_phone_volume_interval")
+        val FIND_PHONE_VIBRATION = stringPreferencesKey("find_phone_vibration")
+        val FIND_PHONE_AUDIO_URI = stringPreferencesKey("find_phone_audio_uri")
+        val FIND_PHONE_SMS_CONFIGS = stringPreferencesKey("find_phone_sms_configs")
+
         val WATCH_BUTTON_ACTION = stringPreferencesKey("watch_button_action")
         val USER_HEIGHT = intPreferencesKey("user_height")
         val USER_WEIGHT = intPreferencesKey("user_weight")
@@ -103,6 +114,17 @@ class AppCache(private val context: Context) {
     val goalSteps: Flow<Int> = context.dataStore.data.map { it[GOAL_STEPS] ?: 8000 }
     val uiAccent: Flow<String> = context.dataStore.data.map { it[UI_ACCENT] ?: "Gold" }
     val syncDndWithPhone: Flow<Boolean> = context.dataStore.data.map { it[SYNC_DND_WITH_PHONE] ?: false }
+
+    val findPhoneLock: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_LOCK] ?: true }
+    val findPhoneWifi: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_WIFI] ?: false }
+    val findPhoneBt: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_BT] ?: false }
+    val findPhoneGps: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_GPS] ?: false }
+    val findPhoneSiren: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_SIREN] ?: true }
+    val findPhoneVolumeInterval: Flow<Int> = context.dataStore.data.map { it[FIND_PHONE_VOLUME_INTERVAL] ?: 3 }
+    val findPhoneVibration: Flow<String> = context.dataStore.data.map { it[FIND_PHONE_VIBRATION] ?: "SOS" }
+    val findPhoneAudioUri: Flow<String?> = context.dataStore.data.map { it[FIND_PHONE_AUDIO_URI] }
+    val findPhoneSmsConfigs: Flow<String> = context.dataStore.data.map { it[FIND_PHONE_SMS_CONFIGS] ?: "[]" }
+
     val lastSyncTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_SYNC_TIMESTAMP] ?: 0L }
     val watchButtonAction: Flow<String> = context.dataStore.data.map { it[WATCH_BUTTON_ACTION] ?: "Flashlight" }
     val userHeight: Flow<Int> = context.dataStore.data.map { it[USER_HEIGHT] ?: 170 }
@@ -241,6 +263,25 @@ class AppCache(private val context: Context) {
             is24HourSys?.let { prefs[IS_24_HOUR] = it }
             isMetricSys?.let { prefs[IS_METRIC] = it }
             goalStepsCount?.let { prefs[GOAL_STEPS] = it }
+        }
+    }
+
+
+    suspend fun updateFindPhoneSettings(
+        lock: Boolean? = null, wifi: Boolean? = null, bt: Boolean? = null, gps: Boolean? = null,
+        siren: Boolean? = null, volumeInterval: Int? = null, vibration: String? = null,
+        audioUri: String? = null, smsConfigs: String? = null
+    ) {
+        context.dataStore.edit { prefs ->
+            lock?.let { prefs[FIND_PHONE_LOCK] = it }
+            wifi?.let { prefs[FIND_PHONE_WIFI] = it }
+            bt?.let { prefs[FIND_PHONE_BT] = it }
+            gps?.let { prefs[FIND_PHONE_GPS] = it }
+            siren?.let { prefs[FIND_PHONE_SIREN] = it }
+            volumeInterval?.let { prefs[FIND_PHONE_VOLUME_INTERVAL] = it }
+            vibration?.let { prefs[FIND_PHONE_VIBRATION] = it }
+            audioUri?.let { prefs[FIND_PHONE_AUDIO_URI] = it }
+            smsConfigs?.let { prefs[FIND_PHONE_SMS_CONFIGS] = it }
         }
     }
 

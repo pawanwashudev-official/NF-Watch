@@ -1,5 +1,13 @@
 package com.neubofy.watch.ble
 
+
+import org.json.JSONArray
+import org.json.JSONObject
+import android.telephony.SmsManager
+import android.location.LocationManager
+
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
@@ -15,7 +23,7 @@ import android.os.Environment
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
+
 import android.content.ContentValues
 import android.provider.MediaStore
 import android.net.Uri
@@ -1578,15 +1586,91 @@ class BleConnectionManager private constructor(private val context: Context) {
         } catch (e: Exception) {}
     }
 
-    private fun startPhoneRingLogic(source: String = "watch") {
-        // Instantly lock phone for both cases
-        val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-        val componentName = android.content.ComponentName(context, com.neubofy.watch.service.AdminReceiver::class.java)
-        if (devicePolicyManager.isAdminActive(componentName)) {
-            devicePolicyManager.lockNow()
-        }
 
-        // --- ENHANCED FIND PHONE: Turn off DND, Turn on Wi-Fi, Turn on Bluetooth ---
+    private fun toggleSecureSettings(wifi: Boolean, bt: Boolean, gps: Boolean) {
+        val hasSecureSettings = ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
+        if (hasSecureSettings) {
+            try {
+                if (wifi) {
+                    android.provider.Settings.Global.putInt(context.contentResolver, "wifi_on", 1)
+                }
+                if (bt) {
+                    android.provider.Settings.Global.putInt(context.contentResolver, "bluetooth_on", 1)
+                }
+                if (gps) {
+                    android.provider.Settings.Secure.putInt(context.contentResolver, android.provider.Settings.Secure.LOCATION_MODE, android.provider.Settings.Secure.LOCATION_MODE_HIGH_ACCURACY)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to toggle secure settings", e)
+            }
+        } else {
+            Log.w(TAG, "WRITE_SECURE_SETTINGS permission missing")
+        }
+    }
+
+    private fun sendSmsAlerts() {
+        scope.launch {
+            val smsConfigsRaw = appCache.findPhoneSmsConfigs.firstOrNull() ?: "[]"
+            val configs = try { JSONArray(smsConfigsRaw) } catch (e: Exception) { return@launch }
+            if (configs.length() == 0) return@launch
+
+            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return@launch
+
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            var locationStr = "Unknown"
+
+            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    val loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                           ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    if (loc != null) {
+                        locationStr = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to get location for SMS", e)
+                }
+            }
+
+            val smsManager = SmsManager.getDefault()
+            for (i in 0 until configs.length()) {
+                try {
+                    val config = configs.getJSONObject(i)
+                    val phone = config.getString("phone")
+                    val messageTemplate = config.getString("message")
+                    val finalMsg = messageTemplate.replace("{location}", locationStr)
+
+                    val parts = smsManager.divideMessage(finalMsg)
+                    smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                    Log.d(TAG, "Sent SMS alert to $phone")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send SMS", e)
+                }
+            }
+        }
+    }
+
+    private fun startPhoneRingLogic(source: String = "watch") {
+        scope.launch {
+            val lockEnabled = appCache.findPhoneLock.firstOrNull() ?: true
+            val wifiEnabled = appCache.findPhoneWifi.firstOrNull() ?: false
+            val btEnabled = appCache.findPhoneBt.firstOrNull() ?: false
+            val gpsEnabled = appCache.findPhoneGps.firstOrNull() ?: false
+            val sirenEnabled = appCache.findPhoneSiren.firstOrNull() ?: true
+
+            if (lockEnabled) {
+                // Instantly lock phone
+                val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+                val componentName = android.content.ComponentName(context, com.neubofy.watch.service.AdminReceiver::class.java)
+                if (devicePolicyManager.isAdminActive(componentName)) {
+                    devicePolicyManager.lockNow()
+                }
+            }
+
+            // Secure Toggles and SMS
+            toggleSecureSettings(wifi = wifiEnabled, bt = btEnabled, gps = gpsEnabled)
+            sendSmsAlerts()
+
+            // --- ENHANCED FIND PHONE: Turn off DND, Turn on Wi-Fi, Turn on Bluetooth ---
         try {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
@@ -1620,9 +1704,12 @@ class BleConnectionManager private constructor(private val context: Context) {
         }
         // --------------------------------------------------------------------------
 
-        _findPhoneRinging.value = true
-        startPhoneRing(source)
+        if (sirenEnabled) {
+            _findPhoneRinging.value = true
+            startPhoneRing(source)
+        }
         scheduleFindPhoneRetrigger()
+        } // end scope.launch
     }
 
     fun stopFindPhone() {
@@ -1649,8 +1736,10 @@ class BleConnectionManager private constructor(private val context: Context) {
             context.sendBroadcast(intent)
 
             volumeGuardianJob = scope.launch(Dispatchers.Main) {
+                val intervalSec = appCache.findPhoneVolumeInterval.firstOrNull() ?: 3
+                val delayTime = (intervalSec * 1000).toLong()
                 while(isActive) {
-                    delay(3000)
+                    delay(delayTime)
                     am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
                     Log.d(TAG, "Volume Guardian: Resetting to MAX")
                 }
@@ -1671,8 +1760,29 @@ class BleConnectionManager private constructor(private val context: Context) {
 
             // 🚨 SOS Pattern Implementation (Sound, Vibration, and Torch)
             sosJob = scope.launch(Dispatchers.Default) {
-                // Initialize AudioTrack for piercing 3200Hz Sine wave (Hardware Safe)
-                val sampleRate = 44100
+                val customAudioUriStr = appCache.findPhoneAudioUri.firstOrNull()
+                val customAudioUri = if (!customAudioUriStr.isNullOrEmpty()) android.net.Uri.parse(customAudioUriStr) else null
+
+                val patternType = appCache.findPhoneVibration.firstOrNull() ?: "SOS"
+
+                if (customAudioUri != null) {
+                    try {
+                        mediaPlayer = android.media.MediaPlayer().apply {
+                            setAudioAttributes(android.media.AudioAttributes.Builder()
+                                .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build())
+                            setDataSource(context, customAudioUri)
+                            isLooping = true
+                            prepare()
+                            start()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to play custom audio", e)
+                    }
+                } else {
+                    // Initialize AudioTrack for piercing 3200Hz Sine wave (Hardware Safe)
+                    val sampleRate = 44100
                 val minSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
                 
                 audioTrack = AudioTrack.Builder()
@@ -1714,13 +1824,17 @@ class BleConnectionManager private constructor(private val context: Context) {
                         yield()
                     }
                 }
+                } // End else branch for audioTrack
 
-                // SOS Timing: S (...), O (---), S (...)
-                val pattern = listOf(
-                    150 to true, 150 to false, 150 to true, 150 to false, 150 to true, 300 to false, // S
-                    450 to true, 150 to false, 450 to true, 150 to false, 450 to true, 300 to false, // O
-                    150 to true, 150 to false, 150 to true, 150 to false, 150 to true, 1000 to false // S
-                )
+                val pattern = if (patternType == "SOS") {
+                    listOf(
+                        150 to true, 150 to false, 150 to true, 150 to false, 150 to true, 300 to false, // S
+                        450 to true, 150 to false, 450 to true, 150 to false, 450 to true, 300 to false, // O
+                        150 to true, 150 to false, 150 to true, 150 to false, 150 to true, 1000 to false // S
+                    )
+                } else {
+                    listOf(500 to true, 500 to false) // Continuous half-second pulses
+                }
 
                 while (isActive) {
                     for ((duration, isOn) in pattern) {

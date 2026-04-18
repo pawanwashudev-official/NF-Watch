@@ -38,7 +38,8 @@ fun SettingsScreen(
     connectionManager: BleConnectionManager,
     appCache: AppCache,
     onDisconnect: () -> Unit,
-    onNavigateToDeveloper: () -> Unit = {}
+    onNavigateToDeveloper: () -> Unit = {},
+    onNavigateToFindPhone: () -> Unit = {}
 ) {
     val connectionState by connectionManager.connectionState.collectAsState()
     val pairedName by appCache.pairedDeviceName.collectAsState(initial = null)
@@ -559,6 +560,21 @@ fun SettingsScreen(
 
             // Privacy
             Spacer(modifier = Modifier.height(20.dp))
+            SettingSectionTitle("Find Phone Settings")
+            GlassSettingsCard {
+                Row(modifier = Modifier.fillMaxWidth().clickable {
+                    // To do: implement navigation
+                    onNavigateToFindPhone()
+                 }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, null, tint = Gold, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("Configure Find Phone", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text("Siren, SMS, Toggles, Lock", color = TextMuted, fontSize = 12.sp)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
             SettingSectionTitle("Privacy")
             GlassSettingsCard {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -637,7 +653,7 @@ private fun SettingSectionTitle(text: String) {
 }
 
 @Composable
-private fun GlassSettingsCard(content: @Composable ColumnScope.() -> Unit) {
+fun GlassSettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
