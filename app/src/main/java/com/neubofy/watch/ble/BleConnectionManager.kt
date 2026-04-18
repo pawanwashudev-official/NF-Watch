@@ -572,7 +572,6 @@ class BleConnectionManager private constructor(private val context: Context) {
                 commitAndStopMeasurement()
             }
             is GoBoultProtocol.ParsedData.FindPhone -> {
-                _findPhoneRinging.value = parsed.ringing
                 if (parsed.ringing) triggerFindPhone() else stopFindPhone()
             }
             is GoBoultProtocol.ParsedData.WatchFaceChanged -> {
@@ -1589,29 +1588,35 @@ class BleConnectionManager private constructor(private val context: Context) {
 
         // --- ENHANCED FIND PHONE: Turn off DND, Turn on Wi-Fi, Turn on Bluetooth ---
         try {
-            // Turn off DND
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 if (notificationManager.isNotificationPolicyAccessGranted) {
                     notificationManager.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
                 }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to turn off DND: ${e.message}")
+        }
 
-            // Turn on Wi-Fi (Works reliably on older Android versions, might be restricted on modern devices)
+        try {
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
             @Suppress("DEPRECATION")
             if (!wifiManager.isWifiEnabled) {
                 wifiManager.isWifiEnabled = true
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to turn on Wi-Fi: ${e.message}")
+        }
 
-            // Turn on Bluetooth
+        try {
             val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
             @Suppress("DEPRECATION")
             if (bluetoothAdapter?.isEnabled == false) {
+                // If BLUETOOTH_CONNECT permission is missing, it might throw SecurityException
                 bluetoothAdapter.enable()
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to toggle system settings during Find Phone: ${e.message}")
+            Log.w(TAG, "Failed to turn on Bluetooth: ${e.message}")
         }
         // --------------------------------------------------------------------------
 
