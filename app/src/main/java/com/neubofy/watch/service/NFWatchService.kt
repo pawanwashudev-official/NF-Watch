@@ -31,7 +31,6 @@ import android.content.pm.ServiceInfo
 import androidx.core.content.ContextCompat
 
 class NFWatchService : Service() {
-    private var simProtectionJob: kotlinx.coroutines.Job? = null
 
 
     private val serviceJob = SupervisorJob()
@@ -57,11 +56,7 @@ class NFWatchService : Service() {
                         setPadding(32, 32, 32, 32)
 
                         val warningText = android.widget.TextView(context).apply {
-                            if (source == "sim_removed") {
-                                text = "WARNING: THEFT DETECTED\n\nREINSERT SIM TO STOP THEFT DETECTION.\n\nYOU ARE UNDER MONITORING. LIVE VIDEOS AND LOCATION ARE BEING SHARED."
-                            } else {
-                                text = "WARNING: FIND PHONE INITIATED\n\nUNLOCK PHONE TO DISMISS.\n\nYOU ARE UNDER MONITORING. LIVE VIDEOS AND LOCATION ARE BEING SHARED."
-                            }
+                            text = "🚨 EMERGENCY ALERT 🚨\n\nUNAUTHORIZED ACCESS DETECTED!\n\nTHIS DEVICE IS LOCKED AND TRACKED.\n\nLIVE VIDEO, AUDIO, AND GPS COORDINATES ARE BEING TRANSMITTED VIA SATELLITE LINK TO THE OWNER.\n\nCONTACT: pawanwashudev@gmail.com\nPHONE: 8521221847, 9507952877\n\nUNLOCK THE DEVICE IMMEDIATELY TO DISMISS THE ALARM AND STOP TRANSMISSION."
                             setTextColor(android.graphics.Color.WHITE)
                             textSize = 24f
                             gravity = android.view.Gravity.CENTER
@@ -75,7 +70,7 @@ class NFWatchService : Service() {
                         android.view.WindowManager.LayoutParams.MATCH_PARENT,
                         android.view.WindowManager.LayoutParams.MATCH_PARENT,
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT,
-                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                         android.graphics.PixelFormat.TRANSLUCENT
                     )
                     params.gravity = android.view.Gravity.CENTER
@@ -100,97 +95,15 @@ class NFWatchService : Service() {
 
 
 
-    private var isSimReceiverRegistered = false
-
-    private val subscriptionManagerListener = object : android.telephony.SubscriptionManager.OnSubscriptionsChangedListener() {
-        override fun onSubscriptionsChanged() {
-            val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
-            if (!prefs.getBoolean("sim_protection_enabled", false)) return
-
-            val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
-            val state = telephonyManager.simState
-
-            if (state == android.telephony.TelephonyManager.SIM_STATE_ABSENT) {
-                handleSimRemoval()
-            } else if (state == android.telephony.TelephonyManager.SIM_STATE_READY) {
-                simProtectionJob?.cancel()
-                simProtectionJob = null
-                connectionManager.stopFindPhone()
-            }
-        }
-    }
-
-    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
-        if (key == "sim_protection_enabled") {
-            val enabled = sharedPreferences.getBoolean(key, false)
-            val subscriptionManager = getSystemService(android.telephony.SubscriptionManager::class.java)
-            if (enabled && !isSimReceiverRegistered) {
-                subscriptionManager?.addOnSubscriptionsChangedListener(mainExecutor, subscriptionManagerListener)
-                isSimReceiverRegistered = true
-                Log.d(TAG, "SIM Protection enabled, listener registered")
-            } else if (!enabled && isSimReceiverRegistered) {
-                try { subscriptionManager?.removeOnSubscriptionsChangedListener(subscriptionManagerListener) } catch (e: Exception) {}
-                isSimReceiverRegistered = false
-                Log.d(TAG, "SIM Protection disabled, listener unregistered")
-            }
-        }
-    }
 
 
-    private fun handleSimRemoval() {
-        simProtectionJob?.cancel()
-        simProtectionJob = serviceScope.launch {
-            // Notification so user knows what's happening
-            try {
-                val notifManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                val builder = androidx.core.app.NotificationCompat.Builder(this@NFWatchService, CHANNEL_ID)
-                    .setSmallIcon(R.mipmap.ic_launcher)
-                    .setContentTitle("SIM Card Removed!")
-                    .setContentText("Theft protection triggered. Device locked.")
-                    .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-                notifManager.notify(9999, builder.build())
-            } catch (e: Exception) {}
-
-            // Instantly lock phone
-            val devicePolicyManager = getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
-            val componentName = android.content.ComponentName(this@NFWatchService, AdminReceiver::class.java)
-            if (devicePolicyManager.isAdminActive(componentName)) {
-                devicePolicyManager.lockNow()
-            } else {
-                Log.w(TAG, "Device Admin is missing, could not lock.")
-            }
 
 
-            // Normal vibrate directly
-            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                val vm = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
-                vm.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                vibrator.vibrate(android.os.VibrationEffect.createOneShot(3000, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(3000)
-            }
-
-            delay(3000)
-            // If not cancelled within 3 seconds, start the loud alarm
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
-            if (keyguardManager.isKeyguardLocked) {
-                connectionManager.triggerFindPhone("sim_removed")
-            }
-        }
-    }
 
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_USER_PRESENT) {
                 Log.d(TAG, "Phone unlocked, stopping find phone / SIM alert")
-                simProtectionJob?.cancel()
-                simProtectionJob = null
                 connectionManager.stopFindPhone()
             }
         }
@@ -264,12 +177,6 @@ class NFWatchService : Service() {
         androidx.core.content.ContextCompat.registerReceiver(this, overlayReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
 
         val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
-        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
-        if (prefs.getBoolean("sim_protection_enabled", false)) {
-            val subscriptionManager = getSystemService(android.telephony.SubscriptionManager::class.java)
-            subscriptionManager?.addOnSubscriptionsChangedListener(mainExecutor, subscriptionManagerListener)
-            isSimReceiverRegistered = true
-        }
         registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
         registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
@@ -317,6 +224,17 @@ class NFWatchService : Service() {
 
         // Auto-reconnect flow
         reconnectIfPaired()
+
+        // Persistent Find Phone Resume
+        val prefsForFindPhone = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
+        if (prefsForFindPhone.getBoolean("find_phone_active", false)) {
+            Log.d(TAG, "Resuming Find Phone after boot!")
+            // Slight delay to ensure system services are ready
+            serviceScope.launch {
+                kotlinx.coroutines.delay(2000)
+                connectionManager.triggerFindPhone("boot")
+            }
+        }
     }
 
     private fun reconnectIfPaired(isPriority: Boolean = false, force: Boolean = false) {
@@ -435,12 +353,7 @@ class NFWatchService : Service() {
             unregisterReceiver(unlockReceiver)
             unregisterReceiver(bluetoothStateReceiver)
         } catch (e: Exception) {}
-        if (isSimReceiverRegistered) {
-            val subscriptionManager = getSystemService(android.telephony.SubscriptionManager::class.java)
-            try { subscriptionManager?.removeOnSubscriptionsChangedListener(subscriptionManagerListener) } catch (e: Exception) {}
-        }
         val prefs = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
-        prefs.unregisterOnSharedPreferenceChangeListener(prefsListener)
         serviceJob.cancel()
         // Intentionally NOT calling unpair/disconnect here.
         // The GATT with autoConnect=true survives service restart via START_STICKY or AlarmManager.

@@ -11,7 +11,8 @@ class BootReceiver : BroadcastReceiver() {
             // Only start service if a device was previously paired
             val prefs = context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
             val pairedAddress = prefs.getString("paired_address", null)
-            if (pairedAddress != null) {
+            val findPhoneActive = prefs.getBoolean("find_phone_active", false)
+            if (pairedAddress != null || findPhoneActive) {
                 Log.d("BootReceiver", "Boot completed, paired device found ($pairedAddress), starting NFWatchService")
                 val serviceIntent = Intent(context, NFWatchService::class.java)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {

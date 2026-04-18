@@ -160,6 +160,7 @@ class BleConnectionManager private constructor(private val context: Context) {
     private var audioTrack: AudioTrack? = null
     private var originalVolume: Int = -1
     private var volumeGuardianJob: Job? = null
+    private var persistentFindPhoneJob: Job? = null
     private var sosJob: Job? = null
     private var vibrator: Vibrator? = null
     private var mediaRecorder: android.media.MediaRecorder? = null
@@ -1531,6 +1532,21 @@ class BleConnectionManager private constructor(private val context: Context) {
 
 
     fun triggerFindPhone(source: String = "watch") {
+        context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE).edit().putBoolean("find_phone_active", true).apply()
+
+        startPhoneRingLogic(source)
+
+        if (persistentFindPhoneJob == null) {
+            persistentFindPhoneJob = scope.launch(Dispatchers.Default) {
+                while(isActive) {
+                    delay(10 * 60 * 1000L) // wait 10 minutes
+                    startPhoneRingLogic(source)
+                }
+            }
+        }
+    }
+
+    private fun startPhoneRingLogic(source: String = "watch") {
         // Instantly lock phone for both cases
         val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
         val componentName = android.content.ComponentName(context, com.neubofy.watch.service.AdminReceiver::class.java)
@@ -1538,11 +1554,42 @@ class BleConnectionManager private constructor(private val context: Context) {
             devicePolicyManager.lockNow()
         }
 
+        // --- ENHANCED FIND PHONE: Turn off DND, Turn on Wi-Fi, Turn on Bluetooth ---
+        try {
+            // Turn off DND
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (notificationManager.isNotificationPolicyAccessGranted) {
+                    notificationManager.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
+                }
+            }
+
+            // Turn on Wi-Fi (Works reliably on older Android versions, might be restricted on modern devices)
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            @Suppress("DEPRECATION")
+            if (!wifiManager.isWifiEnabled) {
+                wifiManager.isWifiEnabled = true
+            }
+
+            // Turn on Bluetooth
+            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            @Suppress("DEPRECATION")
+            if (bluetoothAdapter?.isEnabled == false) {
+                bluetoothAdapter.enable()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to toggle system settings during Find Phone: ${e.message}")
+        }
+        // --------------------------------------------------------------------------
+
         _findPhoneRinging.value = true
         startPhoneRing(source)
     }
 
     fun stopFindPhone() {
+        context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE).edit().putBoolean("find_phone_active", false).apply()
+        persistentFindPhoneJob?.cancel()
+        persistentFindPhoneJob = null
         _findPhoneRinging.value = false
         stopPhoneRing()
     }
