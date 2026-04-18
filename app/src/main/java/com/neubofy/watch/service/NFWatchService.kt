@@ -56,7 +56,7 @@ class NFWatchService : Service() {
                         setPadding(32, 32, 32, 32)
 
                         val warningText = android.widget.TextView(context).apply {
-                            text = "WARNING: FIND PHONE INITIATED\n\nUNLOCK PHONE TO DISMISS.\n\nYOU ARE UNDER MONITORING. LIVE VIDEOS AND LOCATION ARE BEING SHARED."
+                            text = "🚨 EMERGENCY ALERT 🚨\n\nUNAUTHORIZED ACCESS DETECTED!\n\nTHIS DEVICE IS LOCKED AND TRACKED.\n\nLIVE VIDEO, AUDIO, AND GPS COORDINATES ARE BEING TRANSMITTED VIA SATELLITE LINK TO THE OWNER.\n\nCONTACT: pawanwashudev@gmail.com\nPHONE: 8521221847, 9507952877\n\nUNLOCK THE DEVICE IMMEDIATELY TO DISMISS THE ALARM AND STOP TRANSMISSION."
                             setTextColor(android.graphics.Color.WHITE)
                             textSize = 24f
                             gravity = android.view.Gravity.CENTER
@@ -70,7 +70,7 @@ class NFWatchService : Service() {
                         android.view.WindowManager.LayoutParams.MATCH_PARENT,
                         android.view.WindowManager.LayoutParams.MATCH_PARENT,
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT,
-                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                         android.graphics.PixelFormat.TRANSLUCENT
                     )
                     params.gravity = android.view.Gravity.CENTER
@@ -224,6 +224,17 @@ class NFWatchService : Service() {
 
         // Auto-reconnect flow
         reconnectIfPaired()
+
+        // Persistent Find Phone Resume
+        val prefsForFindPhone = getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
+        if (prefsForFindPhone.getBoolean("find_phone_active", false)) {
+            Log.d(TAG, "Resuming Find Phone after boot!")
+            // Slight delay to ensure system services are ready
+            serviceScope.launch {
+                kotlinx.coroutines.delay(2000)
+                connectionManager.triggerFindPhone("boot")
+            }
+        }
     }
 
     private fun reconnectIfPaired(isPriority: Boolean = false, force: Boolean = false) {
