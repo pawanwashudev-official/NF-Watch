@@ -359,8 +359,13 @@ fun FindPhoneSettingsSection(appCache: AppCache) {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED)
     }
 
-    val requestSmsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        smsPermissionGranted = isGranted
+    var locationPermissionGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+    }
+
+    val requestMultiplePermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        smsPermissionGranted = permissions[Manifest.permission.SEND_SMS] ?: smsPermissionGranted
+        locationPermissionGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: locationPermissionGranted
     }
 
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -465,9 +470,11 @@ fun FindPhoneSettingsSection(appCache: AppCache) {
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("SMS Alerts", color = Gold, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            if (!smsPermissionGranted) {
-                TextButton(onClick = { requestSmsPermission.launch(Manifest.permission.SEND_SMS) }) {
-                    Text("Grant Permission", color = AccentRed)
+            if (!smsPermissionGranted || !locationPermissionGranted) {
+                TextButton(onClick = {
+                    requestMultiplePermissions.launch(arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+                }) {
+                    Text("Grant Permissions", color = AccentRed)
                 }
             }
         }
@@ -540,7 +547,12 @@ fun FindPhoneSettingsSection(appCache: AppCache) {
                 }
 
                 if (smsList.size < 10) {
-                    TextButton(onClick = { showAddDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = {
+                        if (!smsPermissionGranted || !locationPermissionGranted) {
+                            requestMultiplePermissions.launch(arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+                        }
+                        showAddDialog = true
+                    }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Add, null, tint = Gold)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Add SMS Configuration", color = Gold)

@@ -1593,16 +1593,21 @@ class BleConnectionManager private constructor(private val context: Context) {
             try {
                 if (wifi) {
                     android.provider.Settings.Global.putInt(context.contentResolver, "wifi_on", 1)
+                    android.provider.Settings.Secure.putInt(context.contentResolver, "wifi_on", 1)
                 }
+            } catch (e: Exception) {}
+            try {
                 if (bt) {
                     android.provider.Settings.Global.putInt(context.contentResolver, "bluetooth_on", 1)
+                    android.provider.Settings.Secure.putInt(context.contentResolver, "bluetooth_on", 1)
                 }
+            } catch (e: Exception) {}
+            try {
                 if (gps) {
+                    @Suppress("DEPRECATION")
                     android.provider.Settings.Secure.putInt(context.contentResolver, android.provider.Settings.Secure.LOCATION_MODE, android.provider.Settings.Secure.LOCATION_MODE_HIGH_ACCURACY)
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to toggle secure settings", e)
-            }
+            } catch (e: Exception) {}
         } else {
             Log.w(TAG, "WRITE_SECURE_SETTINGS permission missing")
         }
@@ -1617,34 +1622,39 @@ class BleConnectionManager private constructor(private val context: Context) {
             if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return@launch
 
             val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            var locationStr = "Unknown"
+            var locationStr = "Location Unknown"
 
-            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                try {
+            try {
+                if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     val loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                            ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
                     if (loc != null) {
                         locationStr = "https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to get location for SMS", e)
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to get location for SMS", e)
             }
 
-            val smsManager = SmsManager.getDefault()
-            for (i in 0 until configs.length()) {
-                try {
-                    val config = configs.getJSONObject(i)
-                    val phone = config.getString("phone")
-                    val messageTemplate = config.getString("message")
-                    val finalMsg = messageTemplate.replace("{location}", locationStr)
+            try {
+                @Suppress("DEPRECATION")
+                val smsManager = SmsManager.getDefault()
+                for (i in 0 until configs.length()) {
+                    try {
+                        val config = configs.getJSONObject(i)
+                        val phone = config.getString("phone")
+                        val messageTemplate = config.getString("message")
+                        val finalMsg = messageTemplate.replace("{location}", locationStr)
 
-                    val parts = smsManager.divideMessage(finalMsg)
-                    smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
-                    Log.d(TAG, "Sent SMS alert to $phone")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to send SMS", e)
+                        val parts = smsManager.divideMessage(finalMsg)
+                        smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
+                        Log.d(TAG, "Sent SMS alert to $phone")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send SMS to specific number", e)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize or send SMS", e)
             }
         }
     }
