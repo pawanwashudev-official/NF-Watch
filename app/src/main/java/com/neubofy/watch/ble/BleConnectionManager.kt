@@ -160,7 +160,6 @@ class BleConnectionManager private constructor(private val context: Context) {
     private var audioTrack: AudioTrack? = null
     private var originalVolume: Int = -1
     private var volumeGuardianJob: Job? = null
-    private var persistentFindPhoneJob: Job? = null
     private var sosJob: Job? = null
     private var vibrator: Vibrator? = null
     private var mediaRecorder: android.media.MediaRecorder? = null
@@ -1532,18 +1531,52 @@ class BleConnectionManager private constructor(private val context: Context) {
 
 
     fun triggerFindPhone(source: String = "watch") {
-        context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE).edit().putBoolean("find_phone_active", true).apply()
-
-        startPhoneRingLogic(source)
-
-        if (persistentFindPhoneJob == null) {
-            persistentFindPhoneJob = scope.launch(Dispatchers.Default) {
-                while(isActive) {
-                    delay(10 * 60 * 1000L) // wait 10 minutes
-                    startPhoneRingLogic(source)
-                }
-            }
+        if (_findPhoneRinging.value && source == "watch") {
+            Log.d(TAG, "Find phone is already ringing, ignoring duplicate trigger from watch")
+            return
         }
+
+        context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE).edit().putBoolean("find_phone_active", true).apply()
+        startPhoneRingLogic(source)
+    }
+
+    private fun scheduleFindPhoneRetrigger() {
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            val intent = android.content.Intent(context, com.neubofy.watch.service.BootReceiver::class.java).apply {
+                action = "com.neubofy.watch.FIND_PHONE_RETRIGGER"
+            }
+            val pendingIntent = android.app.PendingIntent.getBroadcast(
+                context, 1001, intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val triggerTime = System.currentTimeMillis() + (10 * 60 * 1000L) // 10 minutes
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            } else {
+                alarmManager.setExact(android.app.AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            }
+            Log.d(TAG, "Scheduled 10-minute find phone retrigger")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule find phone retrigger: ${e.message}")
+        }
+    }
+
+    private fun cancelFindPhoneRetrigger() {
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            val intent = android.content.Intent(context, com.neubofy.watch.service.BootReceiver::class.java).apply {
+                action = "com.neubofy.watch.FIND_PHONE_RETRIGGER"
+            }
+            val pendingIntent = android.app.PendingIntent.getBroadcast(
+                context, 1001, intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pendingIntent)
+            Log.d(TAG, "Cancelled find phone retrigger")
+        } catch (e: Exception) {}
     }
 
     private fun startPhoneRingLogic(source: String = "watch") {
@@ -1584,12 +1617,12 @@ class BleConnectionManager private constructor(private val context: Context) {
 
         _findPhoneRinging.value = true
         startPhoneRing(source)
+        scheduleFindPhoneRetrigger()
     }
 
     fun stopFindPhone() {
         context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE).edit().putBoolean("find_phone_active", false).apply()
-        persistentFindPhoneJob?.cancel()
-        persistentFindPhoneJob = null
+        cancelFindPhoneRetrigger()
         _findPhoneRinging.value = false
         stopPhoneRing()
     }

@@ -7,14 +7,14 @@ import android.util.Log
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == "com.neubofy.watch.FIND_PHONE_RETRIGGER") {
             // Only start service if a device was previously paired
             val prefs = context.getSharedPreferences("nf_watch_boot", Context.MODE_PRIVATE)
             val pairedAddress = prefs.getString("paired_address", null)
             val findPhoneActive = prefs.getBoolean("find_phone_active", false)
             if (pairedAddress != null || findPhoneActive) {
                 Log.d("BootReceiver", "Boot completed, paired device found ($pairedAddress), starting NFWatchService")
-                val serviceIntent = Intent(context, NFWatchService::class.java)
+                val serviceIntent = Intent(context, NFWatchService::class.java).apply { action = intent.action }
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                     context.startForegroundService(serviceIntent)
                 } else {
