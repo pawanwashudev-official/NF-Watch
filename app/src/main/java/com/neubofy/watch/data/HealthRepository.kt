@@ -8,11 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import android.util.Log
-import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
-import androidx.health.connect.client.units.Pressure
-import androidx.health.connect.client.units.Percentage
-import androidx.health.connect.client.records.metadata.Metadata
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
