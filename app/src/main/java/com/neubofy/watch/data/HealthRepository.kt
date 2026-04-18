@@ -301,10 +301,18 @@ class HealthRepository(
                 // We use our existing custom read logic but only for the specific time range.
                 // readRawHealthConnectHistoryForRange handles generic Record types mapped to our app records.
                 val records = readRawHealthConnectHistoryForRange(type, TimeRangeFilter.between(queryStart, now))
-                records.forEach { hcRec ->
-                    val existing = healthDao.getRecordByTypeAndDateRange(type, hcRec.timestamp, hcRec.timestamp + 1)
-                    if (existing == null) {
-                        healthDao.insert(hcRec.copy(isSyncedToHealthConnect = true))
+                if (records.isNotEmpty()) {
+                    val existingTimestamps = healthDao.getExistingTimestampsInRange(
+                        type,
+                        records.minOf { it.timestamp },
+                        records.maxOf { it.timestamp }
+                    ).toSet()
+
+                    val newRecords = records.filter { it.timestamp !in existingTimestamps }
+                        .map { it.copy(isSyncedToHealthConnect = true) }
+
+                    if (newRecords.isNotEmpty()) {
+                        healthDao.insertAll(newRecords)
                     }
                 }
             } catch (e: Exception) {
