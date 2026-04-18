@@ -38,8 +38,7 @@ fun SettingsScreen(
     connectionManager: BleConnectionManager,
     appCache: AppCache,
     onDisconnect: () -> Unit,
-    onNavigateToDeveloper: () -> Unit = {},
-    onNavigateToFindPhone: () -> Unit = {}
+    onNavigateToDeveloper: () -> Unit = {}
 ) {
     val connectionState by connectionManager.connectionState.collectAsState()
     val pairedName by appCache.pairedDeviceName.collectAsState(initial = null)

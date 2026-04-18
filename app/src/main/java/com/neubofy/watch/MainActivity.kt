@@ -268,12 +268,6 @@ fun NFWatchApp(
                     }
                 )
             }
-            composable("find_phone_settings") {
-                com.neubofy.watch.ui.screens.FindPhoneSettingsScreen(
-                    appCache = appCache,
-                    onBack = { navController.popBackStack() }
-                )
-            }
             composable("notification_settings") {
                 NotificationSettingsScreen(
                     appCache = appCache,
