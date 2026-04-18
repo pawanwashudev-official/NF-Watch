@@ -144,6 +144,17 @@ fun WatchScreen(
                 )
             }
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Find Phone Setup
+        FeatureCard(
+            icon = Icons.Default.Security,
+            title = "Find Phone Setup",
+            subtitle = "Configure Siren, SMS, Lock & Settings",
+            accent = Color(0xFFD50000),
+            onClick = onNavigateToFindPhone
+        )
         
         Spacer(modifier = Modifier.height(16.dp))
 
