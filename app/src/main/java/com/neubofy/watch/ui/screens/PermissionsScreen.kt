@@ -263,7 +263,7 @@ fun PermissionsScreen(
             PermissionCard(
                 icon = Icons.Default.DoNotDisturbOn,
                 title = "DND Sync Access",
-                description = "Required to sync Do Not Disturb mode from watch to phone.",
+                description = "Required to sync Do Not Disturb mode from watch to phone and automatically disable DND during Find Phone alerts.",
                 isGranted = dndAccessGranted,
                 onRequest = {
                     val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
