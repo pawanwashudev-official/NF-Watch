@@ -44,10 +44,10 @@ fun FindPhoneSettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val lockEnabled by appCache.findPhoneLock.collectAsState(initial = true)
-    val wifiEnabled by appCache.findPhoneWifi.collectAsState(initial = false)
-    val btEnabled by appCache.findPhoneBt.collectAsState(initial = false)
-    val gpsEnabled by appCache.findPhoneGps.collectAsState(initial = false)
+    val lockEnabled by appCache.findPhoneLock.collectAsState(initial = false)
+    val wifiEnabled by appCache.findPhoneWifi.collectAsState(initial = true)
+    val btEnabled by appCache.findPhoneBt.collectAsState(initial = true)
+    val gpsEnabled by appCache.findPhoneGps.collectAsState(initial = true)
     val sirenEnabled by appCache.findPhoneSiren.collectAsState(initial = true)
     val volumeInterval by appCache.findPhoneVolumeInterval.collectAsState(initial = 3)
     val vibrationPattern by appCache.findPhoneVibration.collectAsState(initial = "SOS")

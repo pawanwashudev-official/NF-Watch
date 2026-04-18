@@ -32,7 +32,8 @@ import kotlinx.coroutines.launch
 fun WatchScreen(
     connectionManager: BleConnectionManager,
     appCache: AppCache,
-    onNavigateToNotifications: () -> Unit
+    onNavigateToNotifications: () -> Unit,
+    onNavigateToFindPhone: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

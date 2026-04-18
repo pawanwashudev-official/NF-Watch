@@ -115,10 +115,10 @@ class AppCache(private val context: Context) {
     val uiAccent: Flow<String> = context.dataStore.data.map { it[UI_ACCENT] ?: "Gold" }
     val syncDndWithPhone: Flow<Boolean> = context.dataStore.data.map { it[SYNC_DND_WITH_PHONE] ?: false }
 
-    val findPhoneLock: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_LOCK] ?: true }
-    val findPhoneWifi: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_WIFI] ?: false }
-    val findPhoneBt: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_BT] ?: false }
-    val findPhoneGps: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_GPS] ?: false }
+    val findPhoneLock: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_LOCK] ?: false }
+    val findPhoneWifi: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_WIFI] ?: true }
+    val findPhoneBt: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_BT] ?: true }
+    val findPhoneGps: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_GPS] ?: true }
     val findPhoneSiren: Flow<Boolean> = context.dataStore.data.map { it[FIND_PHONE_SIREN] ?: true }
     val findPhoneVolumeInterval: Flow<Int> = context.dataStore.data.map { it[FIND_PHONE_VOLUME_INTERVAL] ?: 3 }
     val findPhoneVibration: Flow<String> = context.dataStore.data.map { it[FIND_PHONE_VIBRATION] ?: "SOS" }
