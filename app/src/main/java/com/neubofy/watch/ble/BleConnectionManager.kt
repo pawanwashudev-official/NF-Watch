@@ -1538,6 +1538,34 @@ class BleConnectionManager private constructor(private val context: Context) {
             devicePolicyManager.lockNow()
         }
 
+        // --- ENHANCED FIND PHONE: Turn off DND, Turn on Wi-Fi, Turn on Bluetooth ---
+        try {
+            // Turn off DND
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                if (notificationManager.isNotificationPolicyAccessGranted) {
+                    notificationManager.setInterruptionFilter(android.app.NotificationManager.INTERRUPTION_FILTER_ALL)
+                }
+            }
+
+            // Turn on Wi-Fi (Works reliably on older Android versions, might be restricted on modern devices)
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            @Suppress("DEPRECATION")
+            if (!wifiManager.isWifiEnabled) {
+                wifiManager.isWifiEnabled = true
+            }
+
+            // Turn on Bluetooth
+            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            @Suppress("DEPRECATION")
+            if (bluetoothAdapter?.isEnabled == false) {
+                bluetoothAdapter.enable()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to toggle system settings during Find Phone: ${e.message}")
+        }
+        // --------------------------------------------------------------------------
+
         _findPhoneRinging.value = true
         startPhoneRing(source)
     }
