@@ -1102,7 +1102,8 @@ class BleConnectionManager private constructor(private val context: Context) {
                 if (_connectionState.value != ConnectionState.CONNECTED) return@launch
 
                 expectedHrIndex = 0
-                addLog("EVENT", "SYNC_START", null, null, null, "Starting full sync sequence...")
+                val sleepOffset = GoBoultProtocol.getSleepDaysAgoOffset()
+                addLog("EVENT", "SYNC_START", null, null, null, "Starting full sync sequence (sleepOffset=$sleepOffset)...")
 
                 // 1. Sync Time & HR Interval
                 val shouldSyncTime = appCache.syncTimeOnConnect.first() 
@@ -1126,14 +1127,14 @@ class BleConnectionManager private constructor(private val context: Context) {
                 syncAndWait<GoBoultProtocol.ParsedData.SleepSummary>(
                     MoyoungPacketManager.buildPacket(MoyoungPacketManager.CMD_SYNC_SLEEP, ByteArray(0)),
                     timeoutMs = 5000
-                ) { it.daysAgo == 0 }
+                ) { it.daysAgo == 0 - sleepOffset }
                 delay(200)
 
                 // 4. Yesterday's Sleep & Steps
                 syncAndWait<GoBoultProtocol.ParsedData.SleepSummary>(
                     MoyoungPacketManager.buildPacket(51, byteArrayOf(3)),
                     timeoutMs = 5000
-                ) { it.daysAgo == 1 }
+                ) { it.daysAgo == 1 - sleepOffset }
                 delay(200)
 
                 syncAndWait<GoBoultProtocol.ParsedData.PastSteps>(
@@ -1148,7 +1149,7 @@ class BleConnectionManager private constructor(private val context: Context) {
                 syncAndWait<GoBoultProtocol.ParsedData.SleepSummary>(
                     MoyoungPacketManager.buildPacket(51, byteArrayOf(4)),
                     timeoutMs = 5000
-                ) { it.daysAgo == 2 }
+                ) { it.daysAgo == 2 - sleepOffset }
                 delay(200)
 
                 syncAndWait<GoBoultProtocol.ParsedData.PastSteps>(

@@ -226,6 +226,16 @@ object GoBoultProtocol {
         )
         return MoyoungPacketManager.buildPacket(18.toByte(), payload) // CMD_SET_PERSONAL_INFO
     }
+
+    /**
+     * The watch considers 8PM (20:00) and later as "yesterday" for sleep data.
+     * This offset must be applied to map watch sleep indices to real dates.
+     */
+    fun getSleepDaysAgoOffset(): Int {
+        val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        return if (currentHour >= 20) 1 else 0
+    }
+
     // --- Notifications ---
     
     /**
@@ -371,12 +381,8 @@ object GoBoultProtocol {
                     } else if (dataType == MoyoungPacketManager.ARG_SYNC_YESTERDAY_SLEEP ||
                                dataType == MoyoungPacketManager.ARG_SYNC_DAY_BEFORE_YESTERDAY_SLEEP) {
                         val stats = SleepParser.parseSleepData(data)
-                        // Gadgetbridge fix: the watch considers 8PM (20:00) and later as "yesterday".
-                        // So if current hour + 4 >= 24, we need to offset daysAgo by -1 for sleep data.
-                        val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-                        val daysAgoOffset = if (currentHour + 4 >= 24) 1 else 0
                         val rawDaysAgo = if (dataType == MoyoungPacketManager.ARG_SYNC_YESTERDAY_SLEEP) 1 else 2
-                        val adjustedDaysAgo = (rawDaysAgo - daysAgoOffset).coerceAtLeast(0)
+                        val adjustedDaysAgo = rawDaysAgo - getSleepDaysAgoOffset()
                         return ParsedData.SleepSummary(stats, adjustedDaysAgo)
                     }
                 }
@@ -384,7 +390,7 @@ object GoBoultProtocol {
             MoyoungPacketManager.CMD_SYNC_SLEEP -> {
                 Log.d(TAG, "Received sleep payload: ${payload.joinToString(" ") { "%02X".format(it) }}")
                 val stats = SleepParser.parseSleepData(payload)
-                return ParsedData.SleepSummary(stats)
+                return ParsedData.SleepSummary(stats, 0 - getSleepDaysAgoOffset())
             }
             MoyoungPacketManager.CMD_QUERY_PAST_HEART_RATE_1 -> {
                 // Protocol: 8 packets (index 0-7). Each covers 6 hours x 12 five-min slots = 72 values.

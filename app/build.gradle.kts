@@ -119,4 +119,6 @@ dependencies {
     // WorkManager - Periodic background tasks
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Testing
+    testImplementation("junit:junit:4.13.2")
 }
