@@ -56,6 +56,9 @@ interface HealthDao {
 
     @Query("SELECT timestamp FROM health_records WHERE type = :type AND timestamp >= :startMs AND timestamp <= :endMs")
     suspend fun getExistingTimestampsInRange(type: String, startMs: Long, endMs: Long): List<Long>
+
+    @Query("SELECT * FROM health_records WHERE type = :type AND timestamp >= :startMs AND timestamp <= :endMs")
+    suspend fun getRecordsInTimeRange(type: String, startMs: Long, endMs: Long): List<HealthRecord>
 }
 
 @Database(entities = [HealthRecord::class], version = 1, exportSchema = false)

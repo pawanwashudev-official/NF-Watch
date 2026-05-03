@@ -14,6 +14,13 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.Duration
 
+data class HealthDataPoint(
+    val value: Double,
+    val systolic: Int? = null,
+    val diastolic: Int? = null,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 /**
  * HealthRepository — writes data DIRECTLY to Health Connect as the primary store.
  * Room DB is used only as a lightweight cache for instant latest-value display.
@@ -224,6 +231,96 @@ class HealthRepository(
                 // Point data (HR, SpO2, BP, Stress): Insert each reading
                 healthDao.insert(record)
             }
+            healthDao.pruneOldRecords(type, 200)
+        }
+    }
+
+    /**
+     * Batch write health data to Health Connect and Room.
+     * Optimizes N+1 issues during history synchronization.
+     */
+    fun insertHealthDataBatch(
+        type: String,
+        points: List<HealthDataPoint>,
+        isIncremental: Boolean = false
+    ) {
+        if (points.isEmpty()) return
+        repositoryScope.launch {
+            val filteredPoints = mutableListOf<HealthDataPoint>()
+            val windowMs = if (isIncremental) 120_000L else 60_000L
+
+            // ── 0. Deduplication (Bulk query optimization) ──
+            val minTs = points.minOf { it.timestamp }
+            val maxTs = points.maxOf { it.timestamp }
+            val existingRecords = healthDao.getRecordsInTimeRange(type, minTs - windowMs, maxTs + windowMs)
+
+            for (point in points) {
+                val existing = existingRecords.find {
+                    kotlin.math.abs(it.timestamp - point.timestamp) <= windowMs &&
+                    it.value == point.value &&
+                    it.isSyncedToHealthConnect
+                }
+                if (existing != null) continue
+
+                filteredPoints.add(point)
+            }
+
+            if (filteredPoints.isEmpty()) return@launch
+
+            // ── 1. Write to Health Connect (Batch) ──
+            val syncedMap = mutableMapOf<Long, Boolean>()
+            try {
+                if (type == "heart_rate") {
+                    val samples = filteredPoints.map {
+                        val time = Instant.ofEpochMilli(it.timestamp)
+                        HealthConnectManager.HeartRateSample(
+                            bpm = it.value.toInt(),
+                            startTime = time,
+                            endTime = if (isIncremental) time.plusSeconds(300) else time.plusSeconds(1)
+                        )
+                    }
+                    val batchSynced = healthConnectManager.writeHeartRateBatch(samples)
+                    filteredPoints.forEach { syncedMap[it.timestamp] = batchSynced }
+                } else {
+                    // Non-batched Health Connect writes (still in single coroutine/transaction context for Room)
+                    for (point in filteredPoints) {
+                        val time = Instant.ofEpochMilli(point.timestamp)
+                        var synced = false
+                        try {
+                            when (type) {
+                                "spo2" -> synced = healthConnectManager.writeSpO2(point.value.toInt(), time)
+                                "blood_pressure" -> {
+                                    if (point.systolic != null && point.diastolic != null) {
+                                        synced = healthConnectManager.writeBloodPressure(point.systolic, point.diastolic, time)
+                                    }
+                                }
+                                "stress" -> {
+                                    // Stress has no HC type, but we mark it as "synced" since there's no HC to sync to
+                                    synced = true
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("HealthRepo", "Failed to write $type point to Health Connect: ${e.message}")
+                        }
+                        syncedMap[point.timestamp] = synced
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("HealthRepo", "Failed to write batch $type to Health Connect: ${e.message}")
+            }
+
+            // ── 2. Cache in Room (Batch) ──
+            val records = filteredPoints.map {
+                HealthRecord(
+                    type = type,
+                    value = it.value,
+                    systolic = it.systolic,
+                    diastolic = it.diastolic,
+                    timestamp = it.timestamp,
+                    isSyncedToHealthConnect = syncedMap[it.timestamp] ?: false
+                )
+            }
+            healthDao.insertAll(records)
             healthDao.pruneOldRecords(type, 200)
         }
     }

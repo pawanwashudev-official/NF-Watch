@@ -87,6 +87,36 @@ class HealthConnectManager(private val context: Context) {
         }
     }
 
+    data class HeartRateSample(val bpm: Int, val startTime: Instant, val endTime: Instant)
+
+    suspend fun writeHeartRateBatch(samples: List<HeartRateSample>): Boolean {
+        val c = client ?: return false
+        if (samples.isEmpty()) return true
+        return try {
+            val records = samples.map { sample ->
+                HeartRateRecord(
+                    startTime = sample.startTime,
+                    endTime = sample.endTime,
+                    startZoneOffset = ZoneOffset.systemDefault().rules.getOffset(sample.startTime),
+                    endZoneOffset = ZoneOffset.systemDefault().rules.getOffset(sample.endTime),
+                    samples = listOf(
+                        HeartRateRecord.Sample(time = sample.startTime, beatsPerMinute = sample.bpm.toLong())
+                    ),
+                    metadata = androidx.health.connect.client.records.metadata.Metadata(
+                        clientRecordId = "hr_${sample.startTime.toEpochMilli()}"
+                    )
+                )
+            }
+            withTimeoutOrNull(15000L) { // Increased timeout for batch
+                c.insertRecords(records)
+                true
+            } ?: false
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write heart rate batch", e)
+            false
+        }
+    }
+
     suspend fun writeSteps(count: Long, startTime: Instant, endTime: Instant, clientRecordId: String? = null): Boolean {
         val c = client ?: return false
         return try {
