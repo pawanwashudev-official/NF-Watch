@@ -6,6 +6,7 @@ import android.content.Context
 import android.media.*
 import android.hardware.camera2.CameraManager
 import android.util.Log
+import com.neubofy.watch.data.HealthDataPoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -492,6 +493,7 @@ class BleConnectionManager private constructor(private val context: Context) {
                     "HR History idx=${parsed.index} day=-${parsed.daysAgo} h=${parsed.startHour} (${parsed.samples.count { it > 0 }} valid of ${parsed.samples.size})")
                 
                 var minuteOffset = 0
+                val hrPoints = mutableListOf<HealthDataPoint>()
                 for (hr in parsed.samples) {
                     val hour = parsed.startHour + (minuteOffset / 60)
                     val minute = minuteOffset % 60
@@ -499,10 +501,13 @@ class BleConnectionManager private constructor(private val context: Context) {
                         val ts = date.atTime(hour, minute)
                             .atZone(zone).toInstant().toEpochMilli()
                         if (ts <= System.currentTimeMillis()) {
-                            healthRepository?.insertHealthData("heart_rate", hr.toDouble(), timestamp = ts, isIncremental = true)
+                            hrPoints.add(HealthDataPoint(hr.toDouble(), timestamp = ts))
                         }
                     }
                     minuteOffset += 5
+                }
+                if (hrPoints.isNotEmpty()) {
+                    healthRepository?.insertHealthDataBatch("heart_rate", hrPoints, isIncremental = true)
                 }
 
                 if (parsed.index != expectedHrIndex) {
@@ -552,20 +557,22 @@ class BleConnectionManager private constructor(private val context: Context) {
                 // 26 half-hour slots (covers 0:00 - 12:30)
                 val date = java.time.LocalDate.now().minusDays(parsed.daysAgo.toLong())
                 val zone = java.time.ZoneId.systemDefault()
-                var savedCount = 0
+                val stressPoints = mutableListOf<HealthDataPoint>()
                 parsed.halfHourSlots.forEachIndexed { i, level ->
                     if (level in 1..100) {
                         val hour = i / 2
                         val minute = if (i % 2 == 0) 0 else 30
                         val ts = date.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
                         if (ts <= System.currentTimeMillis()) {
-                            healthRepository?.insertHealthData("stress", level.toDouble(), timestamp = ts, isIncremental = true)
-                            savedCount++
+                            stressPoints.add(HealthDataPoint(level.toDouble(), timestamp = ts))
                         }
                     }
                 }
+                if (stressPoints.isNotEmpty()) {
+                    healthRepository?.insertHealthDataBatch("stress", stressPoints, isIncremental = true)
+                }
                 addLog("EVENT", "STRESS_HISTORY", null, null, null, 
-                    "Stress history (${parsed.daysAgo}d ago): saved $savedCount of ${parsed.halfHourSlots.size} slots")
+                    "Stress history (${parsed.daysAgo}d ago): saved ${stressPoints.size} of ${parsed.halfHourSlots.size} slots")
             }
             is GoBoultProtocol.ParsedData.MeasurementFinished -> {
                 addLog("EVENT", "MEASURE", null, null, null, "Measurement finished: ${parsed.metricType}")
