@@ -559,6 +559,7 @@ fun SettingsScreen(
 
             // Privacy
             Spacer(modifier = Modifier.height(20.dp))
+
             SettingSectionTitle("Privacy")
             GlassSettingsCard {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -637,7 +638,7 @@ private fun SettingSectionTitle(text: String) {
 }
 
 @Composable
-private fun GlassSettingsCard(content: @Composable ColumnScope.() -> Unit) {
+fun GlassSettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
